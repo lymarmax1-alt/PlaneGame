@@ -1,0 +1,179 @@
+import pygame
+import random
+import sys
+
+# Initialize Pygame
+pygame.init()
+
+# Screen dimensions
+SCREEN_WIDTH = 400
+SCREEN_HEIGHT = 800
+
+# Colors
+BLUE = (135, 206, 235)  # Sky blue
+WHITE = (255, 255, 255)
+GRAY = (128, 128, 128)
+RED = (255, 0, 0)
+BLACK = (0, 0, 0)
+
+# Game settings
+LANE_WIDTH = SCREEN_WIDTH // 3
+LANES = [LANE_WIDTH // 2, LANE_WIDTH + LANE_WIDTH // 2, 2 * LANE_WIDTH + LANE_WIDTH // 2]
+PLAYER_SPEED = 10
+ENEMY_SPEED = 5
+DASH_HEIGHT = 40
+DASH_SPACING = 60
+CLOUD_COUNT = 20
+CLOUD_SPEED = 2
+
+# Set up display
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("Sky Dodger")
+
+# Clock
+clock = pygame.time.Clock()
+
+# Player class
+class Player(pygame.sprite.Sprite):
+    def __init__(self):
+        super().__init__()
+        self.image = pygame.Surface((50, 70), pygame.SRCALPHA)
+        # Draw simple plane shape
+        pygame.draw.polygon(self.image, WHITE, [(25, 0), (0, 70), (50, 70)])  # Body
+        pygame.draw.polygon(self.image, RED, [(0, 50), (0, 70), (50, 70), (50, 50)])  # Wings
+        pygame.draw.circle(self.image, GRAY, (25, 10), 10)  # Propeller
+        pygame.draw.polygon(self.image, RED, [(20, 70), (25, 80), (30, 70)])  # Tail
+        self.rect = self.image.get_rect()
+        self.rect.centerx = LANES[1]
+        self.rect.bottom = SCREEN_HEIGHT - 50
+        self.lane = 1
+
+    def update(self):
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_LEFT] and self.lane > 0:
+            self.lane -= 1
+            self.rect.centerx = LANES[self.lane]
+        if keys[pygame.K_RIGHT] and self.lane < 2:
+            self.lane += 1
+            self.rect.centerx = LANES[self.lane]
+
+# Enemy class
+class Enemy(pygame.sprite.Sprite):
+    def __init__(self, lane):
+        super().__init__()
+        self.image = pygame.Surface((40, 60), pygame.SRCALPHA)
+        # Draw simple enemy plane (similar but different color)
+        pygame.draw.polygon(self.image, GRAY, [(20, 0), (0, 60), (40, 60)])  # Body
+        pygame.draw.polygon(self.image, BLACK, [(0, 40), (0, 60), (40, 60), (40, 40)])  # Wings
+        pygame.draw.circle(self.image, WHITE, (20, 10), 8)  # Propeller
+        self.rect = self.image.get_rect()
+        self.rect.centerx = LANES[lane]
+        self.rect.top = -self.rect.height
+        self.speed = ENEMY_SPEED
+
+    def update(self):
+        self.rect.y += self.speed
+        if self.rect.top > SCREEN_HEIGHT:
+            self.kill()
+
+# Cloud class for background
+class Cloud(pygame.sprite.Sprite):
+    def __init__(self):
+        super().__init__()
+        self.image = pygame.Surface((random.randint(50, 150), random.randint(30, 80)), pygame.SRCALPHA)
+        pygame.draw.ellipse(self.image, WHITE, (0, 0, self.image.get_width(), self.image.get_height()))
+        self.rect = self.image.get_rect()
+        self.rect.x = random.randint(0, SCREEN_WIDTH - self.rect.width)
+        self.rect.y = random.randint(-SCREEN_HEIGHT, SCREEN_HEIGHT)
+        self.speed = CLOUD_SPEED
+
+    def update(self):
+        self.rect.y += self.speed
+        if self.rect.top > SCREEN_HEIGHT:
+            self.rect.y = -self.rect.height
+            self.rect.x = random.randint(0, SCREEN_WIDTH - self.rect.width)
+
+# Dash line management
+dashes = []
+for i in range(SCREEN_HEIGHT // (DASH_HEIGHT + DASH_SPACING) + 2):
+    dashes.append(-i * (DASH_HEIGHT + DASH_SPACING))
+
+# Sprite groups
+all_sprites = pygame.sprite.Group()
+enemies = pygame.sprite.Group()
+clouds = pygame.sprite.Group()
+
+# Create clouds
+for _ in range(CLOUD_COUNT):
+    cloud = Cloud()
+    clouds.add(cloud)
+    all_sprites.add(cloud)
+
+# Create player
+player = Player()
+all_sprites.add(player)
+
+# Game loop
+running = True
+score = 0
+enemy_timer = 0
+dash_speed = ENEMY_SPEED
+
+while running:
+    clock.tick(60)
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+    # Update sprites
+    all_sprites.update()
+
+    # Spawn enemies
+    enemy_timer += 1
+    if enemy_timer > 60:  # Spawn every second
+        lane = random.randint(0, 2)
+        enemy = Enemy(lane)
+        enemies.add(enemy)
+        all_sprites.add(enemy)
+        enemy_timer = 0
+
+    # Collision detection
+    if pygame.sprite.spritecollideany(player, enemies):
+        running = False
+
+    # Update score
+    score += 1
+
+    # Update dashes
+    for i in range(len(dashes)):
+        dashes[i] += dash_speed
+        if dashes[i] > SCREEN_HEIGHT:
+            dashes[i] = - (DASH_HEIGHT + DASH_SPACING)
+
+    # Draw background
+    screen.fill(BLUE)
+
+    # Draw clouds (already in all_sprites, but order matters)
+    clouds.draw(screen)
+
+    # Draw dashes (two lines for left and right)
+    for dash_y in dashes:
+        # Left dash line
+        pygame.draw.rect(screen, WHITE, (LANE_WIDTH - 10, dash_y, 20, DASH_HEIGHT))
+        # Right dash line
+        pygame.draw.rect(screen, WHITE, (2 * LANE_WIDTH - 10, dash_y, 20, DASH_HEIGHT))
+
+    # Draw sprites
+    for sprite in all_sprites:
+        if not isinstance(sprite, Cloud):
+            screen.blit(sprite.image, sprite.rect)
+
+    # Draw score
+    font = pygame.font.SysFont(None, 36)
+    score_text = font.render(f"Score: {score}", True, BLACK)
+    screen.blit(score_text, (10, 10))
+
+    pygame.display.flip()
+
+pygame.quit()
+sys.exit()
